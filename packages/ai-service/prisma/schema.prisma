@@ -1,0 +1,50 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Explanation {
+  id            String   @id @default(uuid()) @db.Uuid
+  transactionId String?  @map("transaction_id") @db.Uuid
+  eventSubject  String   @map("event_subject") @db.VarChar(100)
+  eventData     Json     @map("event_data") @db.JsonB
+  explanation   String   @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([transactionId])
+  @@map("ai_explanations")
+}
+
+model ProcessedEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @unique @map("event_id") @db.Uuid
+  subject     String   @db.VarChar(100)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@index([eventId])
+  @@map("processed_events")
+}
+
+model Outbox {
+  id            String    @id @default(uuid()) @db.Uuid
+  subject       String    @db.VarChar(100)
+  payload       Json      @db.JsonB
+  correlationId String?   @map("correlation_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.Text
+
+  @@index([createdAt])
+  @@index([publishedAt])
+  @@index([correlationId])
+  @@map("outbox")
+}

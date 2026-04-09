@@ -1,0 +1,68 @@
+# Prometheus Configuration for Banking Platform
+
+global:
+  scrape_interval: 15s # Scrape targets every 15 seconds
+  evaluation_interval: 15s # Evaluate rules every 15 seconds
+  external_labels:
+    cluster: 'banking-platform'
+    environment: 'development'
+
+# Scrape configurations
+scrape_configs:
+  # Customer Service
+  - job_name: 'customer-service'
+    static_configs:
+      - targets: ['host.docker.internal:3001']
+        labels:
+          service: 'customer-service'
+          tier: 'backend'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Transaction Service
+  - job_name: 'transaction-service'
+    static_configs:
+      - targets: ['host.docker.internal:3002']
+        labels:
+          service: 'transaction-service'
+          tier: 'backend'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # AI Service
+  - job_name: 'ai-service'
+    static_configs:
+      - targets: ['host.docker.internal:3003']
+        labels:
+          service: 'ai-service'
+          tier: 'backend'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+        labels:
+          service: 'api-gateway'
+          tier: 'gateway'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # GraphQL Gateway
+  - job_name: 'graphql-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          service: 'graphql-gateway'
+          tier: 'gateway'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          tier: 'monitoring'

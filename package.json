@@ -1,0 +1,20 @@
+{
+  "name": "banking-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "test:e2e": "npm run test:e2e --workspaces",
+    "dev:customers": "npm run dev --workspace=packages/customer-service",
+    "dev:transactions": "npm run dev --workspace=packages/transaction-service",
+    "dev:ai": "npm run dev --workspace=packages/ai-service",
+    "dev:gateway": "npm run dev --workspace=packages/api-gateway",
+    "dev:graphql": "npm run dev --workspace=packages/graphql-gateway",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  }
+}

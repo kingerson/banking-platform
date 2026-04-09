@@ -1,0 +1,26 @@
+node_modules/
+dist/
+*.js.map
+.env
+!.env.example
+coverage/
+.DS_Store
+
+# Logs
+*.log
+/tmp/*.log
+
+# Prisma
+.prisma/
+*.db
+*.db-journal
+
+# Kafka / Zookeeper data
+kafka-data/
+zookeeper-data/
+
+# Test artifacts
+*.lcov
+
+# OS
+Thumbs.db

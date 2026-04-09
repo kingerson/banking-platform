@@ -1,0 +1,1968 @@
+{
+  "info": {
+    "_postman_id": "banking-platform-collection-v1",
+    "name": "Banking Platform — Entrevista Demo",
+    "description": "Colección completa para demostrar todos los escenarios del challenge técnico.\n\n## Setup rápido\n1. Importar esta colección\n2. Importar el environment `Banking-Platform.postman_environment.json`\n3. Seleccionar el environment en el dropdown de Postman\n4. Ejecutar **G2 — Login Admin** → el token se guarda automáticamente\n5. Todas las demás requests ya usan ese token (configurado a nivel de colección)\n\n## Flujo recomendado\nG2 → A1 → A5 → A6 → B1 → B2 → B5 → C1 → F4",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-login si no hay token",
+          "const token = pm.environment.get('token') || pm.collectionVariables.get('token');",
+          "if (!token) {",
+          "  console.log('⚠️  No hay token. Ejecuta primero G2 — Login Admin');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Si la respuesta es 401, avisar que hay que renovar el token",
+          "if (pm.response.code === 401) {",
+          "  const body = pm.response.json();",
+          "  if (body.error && body.error.code === 'INVALID_TOKEN') {",
+          "    console.warn('🔄 Token expirado o inválido. Ejecuta G2 (Login) o G8 (Refresh)');",
+          "  }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "readonlyToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "account1Id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "account2Id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "txnId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rejectedTxnId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 G — Seguridad JWT",
+      "item": [
+        {
+          "name": "G0 — Health (público, sin token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Service ok', () => pm.expect(pm.response.json().status).to.eql('ok'));",
+                  "pm.test('Header X-Content-Type-Options presente (Helmet)', () => {",
+                  "  pm.expect(pm.response.headers.get('x-content-type-options')).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G1 — Sin token → 401 Unauthorized",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('Código UNAUTHORIZED', () => pm.expect(pm.response.json().error.code).to.eql('UNAUTHORIZED'));",
+                  "pm.test('success es false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G2 — Login Admin → guarda token automáticamente ⭐",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('Token presente en respuesta', () => pm.expect(body.data.token).to.exist);",
+                  "pm.test('Tipo Bearer', () => pm.expect(body.data.type).to.eql('Bearer'));",
+                  "pm.test('Rol admin', () => pm.expect(body.data.user.role).to.eql('admin'));",
+                  "",
+                  "// ✅ Guardar en AMBOS: environment y collection variables",
+                  "pm.environment.set('token', body.data.token);",
+                  "pm.collectionVariables.set('token', body.data.token);",
+                  "",
+                  "console.log('✅ Token guardado en environment y collection variables');",
+                  "console.log('   Usuario:', body.data.user.email, '| Rol:', body.data.user.role);",
+                  "console.log('   Expira:', body.data.expiresAt);",
+                  "console.log('   Token (primeros 50 chars):', body.data.token.substring(0, 50) + '...');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@bank.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G3 — Login Customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Rol customer', () => pm.expect(pm.response.json().data.user.role).to.eql('customer'));",
+                  "console.log('Token customer (no reemplaza el admin):', pm.response.json().data.token.substring(0, 40) + '...');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@bank.com\",\n  \"password\": \"customer123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G4 — Login credenciales inválidas → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código INVALID_CREDENTIALS', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_CREDENTIALS'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@bank.com\",\n  \"password\": \"password_incorrecto\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G5 — Token con firma inválida → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código INVALID_TOKEN', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWtlIn0.firma_invalida",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G6 — Rol insuficiente (readonly) → 403 Forbidden",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Login como readonly y guardar su token en variable temporal",
+                  "pm.sendRequest({",
+                  "  url: pm.environment.get('baseUrl') + '/auth/login',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: {",
+                  "    mode: 'raw',",
+                  "    raw: JSON.stringify({ email: 'readonly@bank.com', password: 'readonly123' })",
+                  "  }",
+                  "}, (err, res) => {",
+                  "  if (!err && res.json().success) {",
+                  "    pm.environment.set('readonlyToken', res.json().data.token);",
+                  "    pm.collectionVariables.set('readonlyToken', res.json().data.token);",
+                  "    console.log('✅ Token readonly obtenido');",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('Código FORBIDDEN', () => pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN'));",
+                  "console.log('Mensaje:', pm.response.json().error.message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{readonlyToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Forbidden\",\n  \"email\": \"forbidden@test.com\",\n  \"documentNumber\": \"DOC_FORBIDDEN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G7 — GET /auth/me (info del token actual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Tiene email', () => pm.expect(body.data.email).to.exist);",
+                  "pm.test('Tiene role', () => pm.expect(body.data.role).to.exist);",
+                  "pm.test('Tiene expiración', () => pm.expect(body.data.tokenExpiresAt).to.exist);",
+                  "console.log('Usuario:', body.data.email, '| Rol:', body.data.role, '| Expira:', body.data.tokenExpiresAt);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "G8 — POST /auth/refresh (renovar token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Nuevo token presente', () => pm.expect(body.data.token).to.exist);",
+                  "",
+                  "// ✅ Actualizar token en environment y collection",
+                  "pm.environment.set('token', body.data.token);",
+                  "pm.collectionVariables.set('token', body.data.token);",
+                  "console.log('✅ Token renovado. Nuevo expira:', body.data.expiresAt);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 A — Clientes y Cuentas",
+      "item": [
+        {
+          "name": "A1 — Crear cliente (exitoso) → guarda clientId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('success true', () => pm.expect(body.success).to.be.true);",
+                  "pm.test('Tiene ID', () => pm.expect(body.data.id).to.exist);",
+                  "pm.test('Tiene nombre', () => pm.expect(body.data.name).to.exist);",
+                  "",
+                  "// ✅ Guardar clientId para las siguientes requests",
+                  "pm.environment.set('clientId', body.data.id);",
+                  "pm.collectionVariables.set('clientId', body.data.id);",
+                  "console.log('✅ Cliente creado:', body.data.id, '|', body.data.name);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"María García\",\n  \"email\": \"maria_{{$timestamp}}@bank.com\",\n  \"documentNumber\": \"DOC{{$timestamp}}\",\n  \"phone\": \"+34600000001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A2 — Error: campos requeridos faltantes → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 4xx (validación Zod)', () => pm.expect(pm.response.code).to.be.oneOf([400, 422]));",
+                  "pm.test('success false', () => pm.expect(pm.response.json().success).to.be.false);",
+                  "console.log('Error de validación:', JSON.stringify(pm.response.json().error));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A3 — Listar todos los clientes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Es array', () => pm.expect(pm.response.json().data).to.be.an('array'));",
+                  "console.log('Total clientes:', pm.response.json().data.length);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A4 — Obtener cliente por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ID coincide', () => pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('clientId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients/{{clientId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients",
+                "{{clientId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A5 — Crear cuenta 1 (origen €1000) → guarda account1Id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "",
+                  "// ✅ Guardar account1Id",
+                  "pm.environment.set('account1Id', body.data.id);",
+                  "pm.collectionVariables.set('account1Id', body.data.id);",
+                  "console.log('✅ Cuenta 1 creada:', body.data.id, '| Saldo inicial: €1000');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"currency\": \"USD\",\n  \"initialBalance\": 1000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A6 — Crear cuenta 2 (destino €200) → guarda account2Id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "",
+                  "// ✅ Guardar account2Id",
+                  "pm.environment.set('account2Id', body.data.id);",
+                  "pm.collectionVariables.set('account2Id', body.data.id);",
+                  "console.log('✅ Cuenta 2 creada:', body.data.id, '| Saldo inicial: €200');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{clientId}}\",\n  \"currency\": \"USD\",\n  \"initialBalance\": 200\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A7 — Consultar saldo (Cache-Aside Redis: 1ra=MISS, 2da=HIT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tiene balance', () => pm.expect(pm.response.json().data).to.have.property('balance'));",
+                  "console.log('Saldo cuenta 1: $' + pm.response.json().data.balance);",
+                  "console.log('💡 Ejecuta esta request 2 veces: 1ra = cache MISS (va a DB), 2da = cache HIT (Redis)')"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{account1Id}}/balance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{account1Id}}",
+                "balance"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A8 — Listar cuentas del cliente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Al menos 2 cuentas', () => pm.expect(pm.response.json().data.length).to.be.gte(2));",
+                  "pm.response.json().data.forEach(acc => {",
+                  "  console.log('  Cuenta:', acc.id, '| Saldo:', acc.balance, acc.currency);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients/{{clientId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients",
+                "{{clientId}}",
+                "accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "A9 — Error: cliente no encontrado → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('success false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clients/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clients",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💸 B — Transacciones",
+      "item": [
+        {
+          "name": "B1 — Depósito exitoso → 202 Accepted (async)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202 Accepted', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.test('Estado inicial: pending', () => pm.expect(body.data.status).to.eql('pending'));",
+                  "",
+                  "// ✅ Guardar txnId para consultar el estado después",
+                  "pm.environment.set('txnId', body.data.id);",
+                  "pm.collectionVariables.set('txnId', body.data.id);",
+                  "console.log('⏳ Txn creada:', body.data.id);",
+                  "console.log('   Estado: PENDING — esperar ~2s y ejecutar B2 para ver el estado final');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": 500,\n  \"targetAccountId\": \"{{account1Id}}\",\n  \"currency\": \"USD\",\n  \"idempotencyKey\": \"{{idempotencyKey}}\",\n  \"description\": \"Nómina enero\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B2 — Consultar estado (pending → completed) ⏳",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// LISTEN/NOTIFY: balance actualizado en ~50-150ms",
+                  "const start = Date.now();",
+                  "while (Date.now() - start < 200) { /* esperar 200ms al ciclo Kafka */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const txn = pm.response.json().data;",
+                  "console.log('Estado actual:', txn.status);",
+                  "if (txn.status === 'completed') {",
+                  "  pm.test('✅ COMPLETED', () => pm.expect(txn.status).to.eql('completed'));",
+                  "  console.log('Tipo:', txn.type, '| Monto: $' + txn.amount);",
+                  "} else if (txn.status === 'pending') {",
+                  "  console.warn('⏳ Aún pendiente — re-ejecutando en 2s...');",
+                  "  setTimeout(() => pm.sendRequest({",
+                  "    url: pm.variables.replaceIn('{{baseUrl}}/api/v1/transactions/{{txnId}}'),",
+                  "    method: 'GET',",
+                  "    header: [{ key: 'Authorization', value: 'Bearer ' + pm.environment.get('token') }]",
+                  "  }, (err, res) => {",
+                  "    const t = res.json().data;",
+                  "    console.log('Re-check estado:', t.status);",
+                  "    pm.test('✅ Estado final: ' + t.status, () => pm.expect(t.status).to.be.oneOf(['completed','rejected']));",
+                  "  }), 2000);",
+                  "} else {",
+                  "  pm.test('Estado válido', () => pm.expect(txn.status).to.be.oneOf(['pending','completed','rejected']));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/{{txnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "{{txnId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B3 — Retiro exitoso",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.environment.set('txnId', pm.response.json().data.id);",
+                  "pm.collectionVariables.set('txnId', pm.response.json().data.id);",
+                  "console.log('⏳ Retiro enviado:', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"withdrawal\",\n  \"amount\": 100,\n  \"sourceAccountId\": \"{{account1Id}}\",\n  \"currency\": \"USD\",\n  \"idempotencyKey\": \"{{idempotencyKey}}\",\n  \"description\": \"Pago supermercado\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B4 — Transferencia exitosa",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.environment.set('txnId', pm.response.json().data.id);",
+                  "pm.collectionVariables.set('txnId', pm.response.json().data.id);",
+                  "console.log('⏳ Transferencia enviada:', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transfer\",\n  \"amount\": 200,\n  \"sourceAccountId\": \"{{account1Id}}\",\n  \"targetAccountId\": \"{{account2Id}}\",\n  \"currency\": \"USD\",\n  \"idempotencyKey\": \"{{idempotencyKey}}\",\n  \"description\": \"Transferencia a cuenta ahorro\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B5 — ❌ Fondos insuficientes → será REJECTED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202 (async, procesará como rejected)', () => pm.response.to.have.status(202));",
+                  "",
+                  "// ✅ Guardar para consultar el rechazo en B6",
+                  "pm.environment.set('rejectedTxnId', pm.response.json().data.id);",
+                  "pm.collectionVariables.set('rejectedTxnId', pm.response.json().data.id);",
+                  "console.log('⏳ Txn enviada:', pm.response.json().data.id);",
+                  "console.log('   Esperar ~2s y ejecutar B6 para ver el rechazo con motivo');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"withdrawal\",\n  \"amount\": 999999,\n  \"sourceAccountId\": \"{{account1Id}}\",\n  \"currency\": \"USD\",\n  \"idempotencyKey\": \"{{$guid}}\",\n  \"description\": \"Retiro millonario\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B6 — Consultar rechazo (debe ser REJECTED + motivo)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const start = Date.now();",
+                  "while (Date.now() - start < 200) { /* esperar 200ms al ciclo Kafka */ }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const txn = pm.response.json().data;",
+                  "console.log('Estado:', txn.status);",
+                  "if (txn.status === 'rejected') {",
+                  "  pm.test('✅ Correctamente REJECTED', () => pm.expect(txn.status).to.eql('rejected'));",
+                  "  pm.test('Tiene motivo de rechazo', () => pm.expect(txn.reason || txn.rejectionReason || '').to.satisfy(s => s.length > 0));",
+                  "  console.log('Motivo:', txn.reason || txn.rejectionReason);",
+                  "} else if (txn.status === 'pending') {",
+                  "  console.warn('⏳ Aún pendiente — re-verificando en 2s...');",
+                  "  setTimeout(() => pm.sendRequest({",
+                  "    url: pm.variables.replaceIn('{{baseUrl}}/api/v1/transactions/{{rejectedTxnId}}'),",
+                  "    method: 'GET',",
+                  "    header: [{ key: 'Authorization', value: 'Bearer ' + pm.environment.get('token') }]",
+                  "  }, (err, res) => {",
+                  "    const t = res.json().data;",
+                  "    console.log('Re-check estado:', t.status, '| Motivo:', t.reason || t.rejectionReason || '-');",
+                  "  }), 2000);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/{{rejectedTxnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "{{rejectedTxnId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B7 — ❌ Cuenta destino inexistente → será REJECTED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202 (será rejected: account not found)', () => pm.response.to.have.status(202));",
+                  "console.log('⏳ Esperar ~2s y consultar estado — motivo: Target account not found');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": 100,\n  \"targetAccountId\": \"00000000-0000-0000-0000-000000000000\",\n  \"currency\": \"USD\",\n  \"idempotencyKey\": \"{{$guid}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B8 — ❌ Tipo de transacción inválido → 400 (Zod)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 4xx (validación Zod)', () => pm.expect(pm.response.code).to.be.oneOf([400, 422]));",
+                  "pm.test('success false', () => pm.expect(pm.response.json().success).to.be.false);",
+                  "console.log('Error Zod:', JSON.stringify(pm.response.json().error));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"TIPO_INVALIDO\",\n  \"amount\": 100,\n  \"targetAccountId\": \"{{account1Id}}\",\n  \"currency\": \"USD\",\n  \"idempotencyKey\": \"{{$guid}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B9 — ❌ Monto negativo → 400 (Zod)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 4xx (monto debe ser positivo)', () => pm.expect(pm.response.code).to.be.oneOf([400, 422]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": -500,\n  \"targetAccountId\": \"{{account1Id}}\",\n  \"currency\": \"USD\",\n  \"idempotencyKey\": \"{{$guid}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "B10 — Historial de transacciones de cuenta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Es array', () => pm.expect(pm.response.json().data).to.be.an('array'));",
+                  "const txns = pm.response.json().data;",
+                  "console.log('Total transacciones:', txns.length);",
+                  "txns.slice(0, 5).forEach(t => {",
+                  "  const icon = t.status === 'completed' ? '✅' : t.status === 'rejected' ? '❌' : '⏳';",
+                  "  console.log(icon, t.type.padEnd(12), '€' + t.amount, '|', t.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{account1Id}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{account1Id}}",
+                "transactions"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤖 C — Inteligencia Artificial",
+      "item": [
+        {
+          "name": "C1 — Explicar transacción completada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "console.log('Explicación IA:', JSON.stringify(pm.response.json().data, null, 2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"{{txnId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/explain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "explain"
+              ]
+            }
+          }
+        },
+        {
+          "name": "C2 — Explicar transacción rechazada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "console.log('Explicación rechazo:', JSON.stringify(pm.response.json().data, null, 2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"{{rejectedTxnId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/explain",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "explain"
+              ]
+            }
+          }
+        },
+        {
+          "name": "C3 — Resumen de cuenta con historial",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "console.log('Resumen IA:', JSON.stringify(pm.response.json().data, null, 2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{account1Id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "C4 — Traducir evento técnico a lenguaje natural",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tiene mensaje', () => pm.expect(pm.response.json().data.message).to.exist);",
+                  "console.log('Mensaje para usuario:', pm.response.json().data.message);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventSubject\": \"banking.transactions.rejected\",\n  \"eventData\": {\n    \"transactionId\": \"{{rejectedTxnId}}\",\n    \"type\": \"withdrawal\",\n    \"amount\": 999999,\n    \"reason\": \"Insufficient funds. Available: 1200.00, required: 999999.00\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/translate-event",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "translate-event"
+              ]
+            }
+          }
+        },
+        {
+          "name": "C5 — Obtener explicaciones guardadas de una txn",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/explanations/{{txnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "explanations",
+                "{{txnId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "C6 — Analisis de riesgo LOW (deposito normal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"deposit\",\n  \"amount\": 200,\n  \"currency\": \"USD\",\n  \"targetAccountId\": \"{{account1Id}}\",\n  \"description\": \"Nomina mensual\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/risk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "risk"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('riskLevel es low', () => pm.expect(d.riskLevel).to.eql('low'));",
+                  "pm.test('score < 40', () => pm.expect(d.score).to.be.below(40));",
+                  "pm.test('tiene reasons', () => pm.expect(d.reasons).to.be.an('array').with.length.above(0));",
+                  "pm.test('tiene recommendation', () => pm.expect(d.recommendation).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "C7 — Analisis de riesgo MEDIUM (60% del saldo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"withdrawal\",\n  \"amount\": 1500,\n  \"currency\": \"USD\",\n  \"sourceAccountId\": \"{{account1Id}}\",\n  \"description\": \"Retiro parcial\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/risk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "risk"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('riskLevel es medium', () => pm.expect(d.riskLevel).to.eql('medium'));",
+                  "pm.test('score entre 40 y 80', () => { pm.expect(d.score).to.be.above(39); pm.expect(d.score).to.be.below(81); });",
+                  "console.log('Risk analysis:', JSON.stringify(d));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "C8 — Analisis de riesgo HIGH (96% del saldo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"withdrawal\",\n  \"amount\": 2400,\n  \"currency\": \"USD\",\n  \"sourceAccountId\": \"{{account1Id}}\",\n  \"description\": \"Retiro urgente total\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/risk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "risk"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('riskLevel es high', () => pm.expect(d.riskLevel).to.eql('high'));",
+                  "pm.test('score > 80', () => pm.expect(d.score).to.be.above(80));",
+                  "pm.test('recommendation incluye revision', () => pm.expect(d.recommendation.toLowerCase()).to.include('revisar'));",
+                  "console.log('HIGH RISK:', JSON.stringify(d));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "C9 — Traducir evento tecnico rechazado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventSubject\": \"banking.transactions.rejected\",\n  \"eventData\": {\n    \"transactionId\": \"{{txnId}}\",\n    \"type\": \"withdrawal\",\n    \"amount\": 99999,\n    \"reason\": \"Insufficient funds. Available: 800.00, required: 99999.00\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/translate-event",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "translate-event"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('tiene message', () => pm.expect(d.message).to.be.a('string').with.length.above(10));",
+                  "console.log('Translated message:', d.message);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "C10 — Traducir evento completado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventSubject\": \"banking.transactions.completed\",\n  \"eventData\": {\n    \"transactionId\": \"{{txnId}}\",\n    \"type\": \"transfer\",\n    \"amount\": 300,\n    \"currency\": \"USD\",\n    \"sourceAccountId\": \"{{account1Id}}\",\n    \"targetAccountId\": \"{{account2Id}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/translate-event",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "translate-event"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('tiene message', () => pm.expect(d.message).to.be.a('string').with.length.above(10));",
+                  "console.log('Translated message:', d.message);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "C11 — Riesgo sin cuenta origen (sin saldo real)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"transfer\",\n  \"amount\": 10000,\n  \"currency\": \"USD\",\n  \"description\": \"Transferencia internacional sospechosa\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/risk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "risk"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('tiene riskLevel', () => pm.expect(['low','medium','high']).to.include(d.riskLevel));",
+                  "console.log('Risk sin cuenta:', JSON.stringify(d));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "C12 — Error: campos requeridos faltantes en risk",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ai/risk",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ai",
+                "risk"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔍 F — Observabilidad y Health",
+      "item": [
+        {
+          "name": "F1 — Health API Gateway",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "F2 — Health Customer Service (DB + Kafka + Redis)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "console.log('Status:', body.status);",
+                  "if (body.checks) {",
+                  "  Object.entries(body.checks).forEach(([k, v]) => console.log(' ', k + ':', JSON.stringify(v)));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/health",
+              "host": [
+                "http://localhost:3001"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "F3 — Health Transaction Service",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3002/health",
+              "host": [
+                "http://localhost:3002"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "F4 — Health GraphQL Gateway + Circuit Breakers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "console.log('Status global:', body.status);",
+                  "if (body.circuitBreakers) {",
+                  "  body.circuitBreakers.forEach(cb => {",
+                  "    const icon = cb.state === 'closed' ? '✅' : cb.state === 'open' ? '🔴' : '🟡';",
+                  "    console.log(icon, cb.service.padEnd(25), '| estado:', cb.state, '| healthy:', cb.healthy);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:4000/health",
+              "host": [
+                "http://localhost:4000"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "F5 — GraphQL: Query cliente con cuentas y transacciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin errores GraphQL', () => pm.expect(pm.response.json().errors).to.be.undefined);",
+                  "const client = pm.response.json().data?.client;",
+                  "if (client) {",
+                  "  console.log('Cliente:', client.name, '| Cuentas:', client.accounts?.length);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query GetClient($id: ID!) { client(id: $id) { id name email accounts { id balance currency } } }\",\n  \"variables\": { \"id\": \"{{clientId}}\" }\n}"
+            },
+            "url": {
+              "raw": "http://localhost:4000/graphql",
+              "host": [
+                "http://localhost:4000"
+              ],
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

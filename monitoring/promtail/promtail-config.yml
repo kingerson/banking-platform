@@ -1,0 +1,36 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # ── Todos los servicios en un solo job ──────────────────────────────────────
+  # Promtail monitorea todos los archivos .log y usa el timestamp de ingesta
+  # (no el del archivo) para evitar problemas con logs históricos.
+  - job_name: banking-services
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          env: local
+          __path__: /var/log/banking/*.log
+    pipeline_stages:
+      # Extraer el nombre del servicio del nombre del archivo
+      - regex:
+          source: filename
+          expression: '/var/log/banking/(?P<service>[^.]+)\.log'
+      - labels:
+          service:
+      # Extraer nivel de log si el mensaje contiene [ERROR] o [WARN]
+      - regex:
+          expression: '(?i)\[(ERROR|WARN|INFO)\]|"level":"(?P<level2>ERROR|WARN|INFO|error|warn|info)"'
+      - template:
+          source: level
+          template: '{{ if .level }}{{ .level }}{{ else if .level2 }}{{ .level2 }}{{ else }}INFO{{ end }}'
+      - labels:
+          level:

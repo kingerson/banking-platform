@@ -1,0 +1,254 @@
+{
+  "title": "Banking Platform — Transaction Logs",
+  "uid": "banking-txn-logs",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "5s",
+  "time": { "from": "now-6h", "to": "now" },
+  "tags": ["banking", "logs", "transactions"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "✅ Txns Completadas (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "sum(count_over_time({service=\"transaction-service\"} |= \"COMPLETED\" [6h]))",
+        "legendFormat": "Completadas"
+      }],
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "unit": "short",
+          "displayName": "Completadas"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "❌ Txns Rechazadas (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "sum(count_over_time({service=\"transaction-service\"} |= \"REJECTED\" [6h]))",
+        "legendFormat": "Rechazadas"
+      }],
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "unit": "short",
+          "displayName": "Rechazadas"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "📨 Requests HTTP (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "sum(count_over_time({service=\"transaction-service\"} |= \"202 |\" [6h]))",
+        "legendFormat": "Requests"
+      }],
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "unit": "short",
+          "displayName": "Requests 202"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "📦 Eventos Kafka Publicados (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "sum(count_over_time({env=\"local\"} |= \"Published:\" [6h]))",
+        "legendFormat": "Kafka Events"
+      }],
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "purple" },
+          "unit": "short",
+          "displayName": "Kafka Publicados"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "🔄 Tasa de Requests HTTP por Minuto",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "sum(rate({service=\"transaction-service\"} |= \"202 |\" [1m]))",
+          "legendFormat": "Requests aceptados/s"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "sum(rate({service=\"transaction-service\"} |= \"COMPLETED\" [1m]))",
+          "legendFormat": "Saga completados/s"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "sum(rate({service=\"transaction-service\"} |= \"REJECTED\" [1m]))",
+          "legendFormat": "Saga rechazados/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineWidth": 2, "fillOpacity": 8 }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Requests aceptados/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Saga completados/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Saga rechazados/s" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+        ]
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+    {
+      "id": 11,
+      "title": "📊 Eventos Kafka por Tipo",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "sum(rate({env=\"local\"} |= \"transactions.requested\" [1m]))",
+          "legendFormat": "TransactionRequested"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "sum(rate({env=\"local\"} |= \"transactions.completed\" [1m]))",
+          "legendFormat": "TransactionCompleted"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "expr": "sum(rate({env=\"local\"} |= \"balance-updated\" [1m]))",
+          "legendFormat": "BalanceUpdated"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineWidth": 2, "fillOpacity": 8 }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "📋 Logs del Saga — Transacciones en Tiempo Real",
+      "type": "logs",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 12 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "{service=\"transaction-service\"} |~ \"(COMPLETED|REJECTED|Processing|Saga)\"",
+        "legendFormat": ""
+      }],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      }
+    },
+    {
+      "id": 12,
+      "title": "📨 Eventos Kafka — Flujo de Eventos",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 24 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "{env=\"local\"} |~ \"(Published:|Received:|OutboxPoller)\"",
+        "legendFormat": ""
+      }],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      }
+    },
+    {
+      "id": 6,
+      "title": "🔍 Todos los Logs por Servicio",
+      "type": "logs",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 34 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "{env=\"local\"}",
+        "legendFormat": ""
+      }],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      }
+    },
+    {
+      "id": 9,
+      "title": "🔐 API Gateway — Requests HTTP",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 46 },
+      "targets": [{
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "expr": "{service=\"api-gateway\"}",
+        "legendFormat": ""
+      }],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": false,
+        "prettifyLogMessage": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "custom",
+        "label": "Servicio",
+        "current": { "text": "All", "value": "$__all" },
+        "options": [
+          { "text": "All", "value": "$__all" },
+          { "text": "transaction-service", "value": "transaction-service" },
+          { "text": "customer-service", "value": "customer-service" },
+          { "text": "ai-service", "value": "ai-service" },
+          { "text": "api-gateway", "value": "api-gateway" },
+          { "text": "graphql-gateway", "value": "graphql-gateway" }
+        ],
+        "multi": true,
+        "includeAll": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,346 @@
+services:
+  # ── Kafka + Zookeeper ──
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+  # ── Redis ──
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # ── PostgreSQL: Customer Service ──
+  db-customers:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: customers_db
+      POSTGRES_USER: customers_user
+      POSTGRES_PASSWORD: customers_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_customers:/var/lib/postgresql/data
+    # Tuning para alto throughput
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c wal_buffers=16MB
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+
+  # ── PgBouncer: Customer Service ──
+  pgbouncer-customers:
+    image: edoburu/pgbouncer:latest
+    ports:
+      - "6433:5432"
+    environment:
+      DB_HOST: db-customers
+      DB_PORT: 5432
+      DB_NAME: customers_db
+      DB_USER: customers_user
+      DB_PASSWORD: customers_pass
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 25
+      MIN_POOL_SIZE: 5
+      RESERVE_POOL_SIZE: 5
+      RESERVE_POOL_TIMEOUT: 3
+      SERVER_IDLE_TIMEOUT: 600
+      CLIENT_IDLE_TIMEOUT: 0
+      AUTH_TYPE: plain
+    depends_on:
+      - db-customers
+
+  # ── PostgreSQL: Transaction Service ──
+  db-transactions:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: transactions_db
+      POSTGRES_USER: transactions_user
+      POSTGRES_PASSWORD: transactions_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - pg_transactions:/var/lib/postgresql/data
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=128MB
+      -c wal_buffers=32MB
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c synchronous_commit=off
+
+  # ── PgBouncer: Transaction Service ──
+  pgbouncer-transactions:
+    image: edoburu/pgbouncer:latest
+    ports:
+      - "6434:5432"
+    environment:
+      DB_HOST: db-transactions
+      DB_PORT: 5432
+      DB_NAME: transactions_db
+      DB_USER: transactions_user
+      DB_PASSWORD: transactions_pass
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 2000
+      DEFAULT_POOL_SIZE: 30
+      MIN_POOL_SIZE: 10
+      RESERVE_POOL_SIZE: 10
+      RESERVE_POOL_TIMEOUT: 3
+      SERVER_IDLE_TIMEOUT: 600
+      CLIENT_IDLE_TIMEOUT: 0
+      AUTH_TYPE: plain
+    depends_on:
+      - db-transactions
+
+  # ── PostgreSQL: AI Service ──
+  db-ai:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ai_db
+      POSTGRES_USER: ai_user
+      POSTGRES_PASSWORD: ai_pass
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_ai:/var/lib/postgresql/data
+    command: >
+      postgres
+      -c max_connections=100
+      -c shared_buffers=128MB
+      -c work_mem=4MB
+
+  # ── PgBouncer: AI Service ──
+  pgbouncer-ai:
+    image: edoburu/pgbouncer:latest
+    ports:
+      - "6435:5432"
+    environment:
+      DB_HOST: db-ai
+      DB_PORT: 5432
+      DB_NAME: ai_db
+      DB_USER: ai_user
+      DB_PASSWORD: ai_pass
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 10
+      MIN_POOL_SIZE: 2
+      AUTH_TYPE: plain
+    depends_on:
+      - db-ai
+
+  # ── Microservices ──
+  customer-service:
+    build:
+      context: .
+      dockerfile: packages/customer-service/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      KAFKA_BROKERS: kafka:9093
+      REDIS_URL: redis://redis:6379
+      # Conectar via PgBouncer (transaction pooling)
+      DB_HOST: pgbouncer-customers
+      DB_PORT: 5432
+      DB_NAME: customers_db
+      DB_USER: customers_user
+      DB_PASSWORD: customers_pass
+      DB_POOL_MAX: 20                         # pool pequeño: PgBouncer multiplexa
+      DATABASE_URL: postgresql://customers_user:customers_pass@pgbouncer-customers:5432/customers_db
+    depends_on:
+      - kafka
+      - redis
+      - pgbouncer-customers
+    restart: unless-stopped
+
+  transaction-service:
+    build:
+      context: .
+      dockerfile: packages/transaction-service/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      KAFKA_BROKERS: kafka:9093
+      # Conectar via PgBouncer (transaction pooling)
+      DB_HOST: pgbouncer-transactions
+      DB_PORT: 5432
+      DB_NAME: transactions_db
+      DB_USER: transactions_user
+      DB_PASSWORD: transactions_pass
+      DB_POOL_MAX: 20                         # pool pequeño: PgBouncer multiplexa
+      DATABASE_URL: postgresql://transactions_user:transactions_pass@pgbouncer-transactions:5432/transactions_db
+      CUSTOMER_SERVICE_URL: http://customer-service:3001
+    depends_on:
+      - kafka
+      - pgbouncer-transactions
+      - customer-service
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: packages/ai-service/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      KAFKA_BROKERS: kafka:9093
+      DB_HOST: pgbouncer-ai
+      DB_PORT: 5432
+      DB_NAME: ai_db
+      DB_USER: ai_user
+      DB_PASSWORD: ai_pass
+      DB_POOL_MAX: 10
+      DATABASE_URL: postgresql://ai_user:ai_pass@pgbouncer-ai:5432/ai_db
+      LLM_PROVIDER: mock
+      TRANSACTION_SERVICE_URL: http://transaction-service:3002
+    depends_on:
+      - kafka
+      - pgbouncer-ai
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: packages/api-gateway/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      CUSTOMER_SERVICE_URL: http://customer-service:3001
+      TRANSACTION_SERVICE_URL: http://transaction-service:3002
+      AI_SERVICE_URL: http://ai-service:3003
+    depends_on:
+      - customer-service
+      - transaction-service
+      - ai-service
+    restart: unless-stopped
+
+  graphql-gateway:
+    build:
+      context: .
+      dockerfile: packages/graphql-gateway/Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      CUSTOMER_SERVICE_URL: http://customer-service:3001
+      TRANSACTION_SERVICE_URL: http://transaction-service:3002
+      AI_SERVICE_URL: http://ai-service:3003
+    depends_on:
+      - customer-service
+      - transaction-service
+      - ai-service
+    restart: unless-stopped
+
+  # ── Loki (almacenamiento de logs) ──
+  loki:
+    image: grafana/loki:2.9.0
+    ports:
+      - "3100:3100"
+    user: "0"                              # root para tener permisos de escritura
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+
+  # ── Promtail (recolector de logs) ──
+  promtail:
+    image: grafana/promtail:2.9.0
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
+      # Monta el directorio de logs de los servicios Node.js
+      - /tmp:/var/log/banking:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  # ── Prometheus ──
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+  # ── Grafana ──
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3030:3000"          # Puerto 3030 para no colisionar con api-gateway (3000)
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_FEATURE_TOGGLES_ENABLE=lokiExploreLogsEnabled
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
+  redis_data:
+  pg_customers:
+  pg_transactions:
+  pg_ai:
+  prometheus_data:
+  grafana_data:
+  loki_data:

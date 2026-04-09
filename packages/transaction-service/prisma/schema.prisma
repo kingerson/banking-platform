@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Transaction {
+  id               String    @id @db.Uuid
+  type             String    @db.VarChar(20)
+  status           String    @default("pending") @db.VarChar(20)
+  amount           Decimal   @db.Decimal(15, 2)
+  currency         String    @default("PEN") @db.VarChar(3)
+  sourceAccountId  String?   @map("source_account_id") @db.Uuid
+  targetAccountId  String?   @map("target_account_id") @db.Uuid
+  idempotencyKey   String    @unique @map("idempotency_key") @db.VarChar(255)
+  description      String?   @db.Text
+  reason           String?   @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@index([sourceAccountId])
+  @@index([targetAccountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model AccountProjection {
+  accountId String   @id @map("account_id") @db.Uuid
+  balance   Decimal  @default(0) @db.Decimal(15, 2)
+  currency  String   @default("USD") @db.VarChar(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("account_projections")
+}
+
+model ProcessedEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @unique @map("event_id") @db.Uuid
+  subject     String   @db.VarChar(100)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@index([eventId])
+  @@map("processed_events")
+}
+
+model Outbox {
+  id            String    @id @default(uuid()) @db.Uuid
+  subject       String    @db.VarChar(100)
+  payload       Json      @db.JsonB
+  correlationId String?   @map("correlation_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.Text
+
+  @@index([createdAt])
+  @@index([publishedAt])
+  @@index([correlationId])
+  @@map("outbox")
+}
