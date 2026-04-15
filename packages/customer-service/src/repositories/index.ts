@@ -1,14 +1,16 @@
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
 import { Client, Account, OutboxRepository } from '@banking/shared';
-import { pool } from '../models/database.js';
+import { pool as defaultPool } from '../models/database';
 
 export { OutboxRepository };
 
+@Injectable()
 export class ClientRepository {
   private pool: Pool;
 
-  constructor(dbPool?: Pool) {
-    this.pool = dbPool || pool;
+  constructor(@Optional() @Inject('PG_POOL') dbPool?: Pool) {
+    this.pool = dbPool || defaultPool;
   }
 
   async create(client: Omit<Client, 'createdAt'> & { createdAt?: string }): Promise<Client> {
@@ -48,11 +50,12 @@ export class ClientRepository {
   }
 }
 
+@Injectable()
 export class AccountRepository {
   private pool: Pool;
 
-  constructor(dbPool?: Pool) {
-    this.pool = dbPool || pool;
+  constructor(@Optional() @Inject('PG_POOL') dbPool?: Pool) {
+    this.pool = dbPool || defaultPool;
   }
 
   async create(account: Omit<Account, 'createdAt'> & { createdAt?: string }): Promise<Account> {
@@ -121,11 +124,12 @@ export class AccountRepository {
   }
 }
 
+@Injectable()
 export class EventTracker {
   private pool: Pool;
 
-  constructor(dbPool?: Pool) {
-    this.pool = dbPool || pool;
+  constructor(@Optional() @Inject('PG_POOL') dbPool?: Pool) {
+    this.pool = dbPool || defaultPool;
   }
 
   async isProcessed(eventId: string): Promise<boolean> {

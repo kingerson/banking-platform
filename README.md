@@ -1,6 +1,6 @@
 # Banking Platform
 
-Plataforma bancaria basada en microservicios con arquitectura event-driven.
+Plataforma bancaria basada en microservicios con arquitectura event-driven, construida con **NestJS**, TypeScript y Apache Kafka.
 
 ## Arquitectura
 
@@ -27,10 +27,10 @@ Plataforma bancaria basada en microservicios con arquitectura event-driven.
     │  Customer Svc    │ │ Transaction Svc  │ │   AI / LLM Svc   │
     │    (:3001)       │ │    (:3002)       │ │     (:3003)      │
     │─────────────────-│ │─────────────────-│ │─────────────────-│
+    │ NestJS           │ │ NestJS           │ │ NestJS           │
     │ Clientes         │ │ Depositos        │ │ Explicaciones    │
     │ Cuentas          │ │ Retiros          │ │ Resumenes        │
     │ Saldos           │ │ Transferencias   │ │ Analisis riesgo  │
-    │ Prisma ORM       │ │ Prisma ORM       │ │ Prisma ORM       │
     └──────────────────┘ └──────────────────┘ └──────────────────┘
                |                    |                    |
     ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
@@ -145,10 +145,15 @@ Proxy al microservicio
 **Endpoints publicos** (sin JWT):
 
 ```
-POST /auth/login    obtener token
-POST /auth/refresh  renovar token
-GET  /auth/me       info del token actual
+POST /auth/login    obtener token JWT
 GET  /health        estado del gateway
+```
+
+**Endpoints protegidos** (requieren JWT):
+
+```
+POST /auth/refresh  renovar token
+GET  /auth/me       info del usuario autenticado
 ```
 
 **Permisos por rol:**
@@ -350,33 +355,62 @@ banking-platform/
 │   │       ├── security/           OWASP middleware
 │   │       ├── types/              DTOs, interfaces, IEventBus
 │   │       └── utils/              Errors, ErrorHandler
-│   ├── api-gateway/                punto de entrada REST (JWT, RBAC, proxy)
+│   ├── api-gateway/                punto de entrada REST (NestJS, JWT, RBAC, proxy)
 │   │   └── src/
-│   ├── customer-service/           clientes y cuentas
+│   │       ├── auth/               AuthController, AuthModule, LoginDto
+│   │       ├── common/
+│   │       │   ├── decorators/     @Roles
+│   │       │   ├── filters/        AllExceptionsFilter
+│   │       │   └── guards/         JwtAuthGuard, RolesGuard
+│   │       ├── health/             HealthController
+│   │       ├── proxy/              ProxyController, ProxyModule
+│   │       ├── app.module.ts
+│   │       └── main.ts
+│   ├── customer-service/           clientes y cuentas (NestJS)
 │   │   ├── src/
+│   │   │   ├── accounts/           AccountsController, AccountsModule, DTOs
+│   │   │   ├── clients/            ClientsController, ClientsModule, DTOs
+│   │   │   ├── common/filters/     AllExceptionsFilter
+│   │   │   ├── database/           DatabaseModule (pg Pool)
+│   │   │   ├── events/             EventsModule (KafkaEventBus)
+│   │   │   ├── kafka/              KafkaModule
 │   │   │   ├── models/             schema PostgreSQL
-│   │   │   ├── repositories/       acceso a datos (pg + Prisma)
-│   │   │   ├── routes/
-│   │   │   ├── services/
-│   │   │   └── subscribers/        Kafka consumers (balance updates)
+│   │   │   ├── outbox/             OutboxModule (poller lifecycle)
+│   │   │   ├── repositories/       CustomerRepo, AccountRepo
+│   │   │   ├── services/           CustomerService (@Injectable)
+│   │   │   ├── subscribers/        Kafka consumers (balance updates)
+│   │   │   ├── app.module.ts
+│   │   │   └── main.ts
 │   │   └── tests/
-│   ├── transaction-service/        transacciones, Saga, CQRS
+│   ├── transaction-service/        transacciones, Saga, CQRS (NestJS)
 │   │   ├── src/
+│   │   │   ├── common/filters/     AllExceptionsFilter
+│   │   │   ├── database/           DatabaseModule
+│   │   │   ├── kafka/              KafkaModule
 │   │   │   ├── models/
-│   │   │   ├── repositories/       TransactionRepo, ProjectionRepo
-│   │   │   ├── routes/
-│   │   │   ├── saga/               Choreography Saga
-│   │   │   ├── services/
-│   │   │   └── subscribers/        CQRS projections
+│   │   │   ├── outbox/             OutboxModule
+│   │   │   ├── repositories/       TransactionRepo, ProjectionRepo, EventTracker
+│   │   │   ├── saga/               SagaService (@Injectable, onModuleInit)
+│   │   │   ├── services/           TransactionService
+│   │   │   ├── subscribers/        ProjectionService (CQRS projections)
+│   │   │   ├── transactions/       TransactionsController, TransactionsModule, DTOs
+│   │   │   ├── app.module.ts
+│   │   │   └── main.ts
 │   │   └── tests/
-│   ├── ai-service/                 analisis con LLM
+│   ├── ai-service/                 analisis con LLM (NestJS)
 │   │   ├── src/
-│   │   │   ├── providers/          LLM provider (Anthropic/mock)
-│   │   │   ├── routes/
-│   │   │   ├── services/
-│   │   │   └── subscribers/
+│   │   │   ├── ai/                 AiController, AiModule, DTOs
+│   │   │   ├── common/filters/     AllExceptionsFilter
+│   │   │   ├── database/           DatabaseModule
+│   │   │   ├── kafka/              KafkaModule
+│   │   │   ├── outbox/             OutboxModule
+│   │   │   ├── providers/          LLM provider (Anthropic/mock), createLLMProvider
+│   │   │   ├── services/           AiService (@Inject LLM_PROVIDER)
+│   │   │   ├── subscribers/        AISubscriberService
+│   │   │   ├── app.module.ts
+│   │   │   └── main.ts
 │   │   └── tests/
-│   └── graphql-gateway/            API GraphQL unificada (BFF)
+│   └── graphql-gateway/            API GraphQL unificada (BFF, Express + Apollo)
 │       └── src/
 │           ├── schema/             TypeDefs, Resolvers
 │           └── utils/              CircuitBreaker, ServiceBreakers
@@ -400,6 +434,7 @@ banking-platform/
 - Node.js 20+
 - Docker Desktop
 - npm 9+
+- TypeScript 5+ (las dependencias NestJS requieren `experimentalDecorators` y `emitDecoratorMetadata`)
 
 ## Instalación
 
@@ -793,6 +828,35 @@ pkill -f "tsx"
 docker compose down -v
 ```
 
+## Stack tecnológico
+
+### Framework: NestJS
+
+Los cuatro microservicios principales (`api-gateway`, `customer-service`, `transaction-service`, `ai-service`) están construidos con **NestJS**, aprovechando sus capacidades de inyección de dependencias, decoradores y modularización.
+
+| Característica NestJS | Uso en el proyecto |
+|---|---|
+| `@Module` | Cada dominio (Clients, Accounts, Transactions, AI, Auth) tiene su propio módulo |
+| `@Injectable` | Servicios, repositorios, subscribers y saga son providers inyectables |
+| `@Controller` + `@Get/@Post` | Controllers REST con decoradores por ruta y método |
+| `ValidationPipe` + `class-validator` | DTOs validan automáticamente el body de cada request |
+| `@UseGuards` | `JwtAuthGuard` y `RolesGuard` protegen rutas por autenticación y rol |
+| `@Catch` (ExceptionFilter) | `AllExceptionsFilter` global mapea errores de dominio a HTTP status correctos |
+| `onModuleInit` | `SagaService`, `ProjectionService` y `OutboxModule` se suscriben a Kafka al arrancar |
+| `OnModuleDestroy` | `KafkaModule` cierra conexiones al apagar el servicio |
+| `SwaggerModule` | Documentación OpenAPI disponible en `/api/docs` de cada servicio |
+
+### Swagger / OpenAPI
+
+Cada servicio expone su documentación en:
+
+| Servicio | URL |
+|---|---|
+| API Gateway | http://localhost:3000/api/docs |
+| Customer Service | http://localhost:3001/api/docs |
+| Transaction Service | http://localhost:3002/api/docs |
+| AI Service | http://localhost:3003/api/docs |
+
 ## Patrones implementados
 
 ### Arquitectura y mensajería
@@ -817,6 +881,16 @@ docker compose down -v
 | Retry con backoff exponencial | LLM reintenta 3 veces con delays crecientes ante errores de API |
 | Fallback chain | si Anthropic falla, el sistema cae al Mock sin error visible al usuario |
 | Rate limiter interno | max 3 llamadas LLM concurrentes, 200ms entre llamadas |
+
+### Framework y API
+
+| Patron / Herramienta | Descripcion |
+|---|---|
+| NestJS Modules | organizacion por dominio con inyeccion de dependencias |
+| NestJS Guards | JwtAuthGuard y RolesGuard aplicados con @UseGuards |
+| NestJS Pipes | ValidationPipe global valida DTOs con class-validator |
+| NestJS Filters | AllExceptionsFilter convierte errores de dominio a HTTP |
+| Swagger / OpenAPI | documentacion auto-generada por servicio en /api/docs |
 
 ### Seguridad
 

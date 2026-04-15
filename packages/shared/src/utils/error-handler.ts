@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
-import { AppError } from './errors.js';
+import { AppError } from './errors';
 
 export function createErrorHandler() {
   return (err: Error, _req: Request, res: Response, _next: NextFunction): void => {

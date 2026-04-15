@@ -1,5 +1,5 @@
 import { Kafka, Producer, EachMessagePayload } from 'kafkajs';
-import { DomainEvent, Subject } from '../events/index.js';
+import { DomainEvent, Subject } from '../events/index';
 
 export interface KafkaDLQConfig {
   kafka: Kafka;

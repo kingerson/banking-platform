@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { config } from '../config/index.js';
+import { config } from '../config/index';
 
 export const pool = new Pool(config.db);
 

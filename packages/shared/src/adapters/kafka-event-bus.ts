@@ -1,7 +1,7 @@
 import { Kafka, Producer, Consumer, EachMessagePayload, Admin } from 'kafkajs';
 import { v4 as uuid } from 'uuid';
-import { DomainEvent, Subject } from '../events/index.js';
-import { IEventBus } from '../types/event-bus.interface.js';
+import { DomainEvent, Subject } from '../events/index';
+import { IEventBus } from '../types/event-bus.interface';
 
 export interface KafkaEventBusConfig {
   brokers: string[];

@@ -1,27 +1,46 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 /**
  * E2E Test: Full Transfer Flow
  *
  * Prerequisites:
- *   - docker compose up -d (NATS + 3 PostgreSQL)
- *   - All 3 microservices running
+ *   - docker compose up -d (PostgreSQL, Kafka, Redis)
+ *   - All microservices running (scripts/start-services.sh)
+ *   - JWT_SECRET env var set (default: 'banking-secret-key-dev')
  *
  * This test exercises the complete async flow:
- *   1. Create two clients
- *   2. Create accounts for each
- *   3. Deposit funds into source account
- *   4. Transfer from source to target
- *   5. Verify balances updated
- *   6. Get AI explanation
+ *   1. Login to obtain JWT token
+ *   2. Create two clients
+ *   3. Create accounts for each
+ *   4. Deposit funds into source account
+ *   5. Transfer from source to target
+ *   6. Verify balances updated
+ *   7. Get AI explanation
  */
 
 const GATEWAY = process.env.GATEWAY_URL || 'http://localhost:3000';
+let authToken = '';
+
+async function login() {
+  const res = await fetch(`${GATEWAY}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: process.env.E2E_USER || 'admin@bank.com',
+      password: process.env.E2E_PASS || 'admin123',
+    }),
+  });
+  const data = await res.json();
+  return data.token as string;
+}
 
 async function api(method: string, path: string, body?: any) {
   const res = await fetch(`${GATEWAY}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   return res.json();
@@ -36,6 +55,11 @@ describe('E2E: Full Transfer Flow', () => {
   let clientB: any;
   let accountA: any;
   let accountB: any;
+
+  beforeAll(async () => {
+    authToken = await login();
+    expect(authToken).toBeTruthy();
+  });
 
   it('1. should create two clients', async () => {
     const resA = await api('POST', '/api/v1/clients', {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MockLLMProvider } from '../../src/providers/llm.provider.js';
+import { MockLLMProvider } from '../../src/providers/llm.provider';
 
 describe('MockLLMProvider', () => {
   const provider = new MockLLMProvider();

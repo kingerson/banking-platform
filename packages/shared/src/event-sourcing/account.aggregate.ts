@@ -1,4 +1,4 @@
-import { Aggregate, DomainEventES } from './aggregate.js';
+import { Aggregate, DomainEventES } from './aggregate';
 
 export interface AccountState {
   id: string;

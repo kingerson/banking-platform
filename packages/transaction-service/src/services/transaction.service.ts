@@ -1,3 +1,4 @@
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
 import {
   CreateTransactionInput,
@@ -7,25 +8,25 @@ import {
   NotFoundError,
   OutboxRepository,
 } from '@banking/shared';
-import { TransactionRepository } from '../repositories/index.js';
-import { config } from '../config/index.js';
-import { pool as defaultPool } from '../models/database.js';
+import { TransactionRepository } from '../repositories';
+import { config } from '../config';
+import { pool as defaultPool } from '../models/database';
 import type { Pool } from 'pg';
 
+@Injectable()
 export class TransactionService {
   private outboxRepo: OutboxRepository;
   private pool: Pool;
 
   constructor(
-    private txnRepo: TransactionRepository,
-    injectedPool?: Pool,
+    @Inject(TransactionRepository) private txnRepo: TransactionRepository,
+    @Optional() @Inject('PG_POOL') injectedPool?: Pool,
   ) {
     this.pool = injectedPool ?? defaultPool;
     this.outboxRepo = new OutboxRepository(this.pool);
   }
 
   async requestTransaction(input: CreateTransactionInput, correlationId?: string) {
-
     this.validateTransactionInput(input);
 
     const existing = await this.txnRepo.findByIdempotencyKey(input.idempotencyKey);
@@ -123,7 +124,6 @@ export class TransactionService {
         }
       } catch (err) {
         if (err instanceof NotFoundError) throw err;
-
         console.warn(`[TransactionService] Could not validate account ${accountId}, proceeding optimistically`);
       }
     }

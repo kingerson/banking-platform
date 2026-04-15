@@ -1,5 +1,5 @@
-import { config } from '../config/index.js';
-import { SYSTEM_PROMPT } from '../prompts/index.js';
+import { config } from '../config/index';
+import { SYSTEM_PROMPT } from '../prompts/index';
 
 export interface LLMProvider {
   explain(prompt: string): Promise<string>;

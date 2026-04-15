@@ -1,9 +1,10 @@
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { Pool } from 'pg';
 import { NotFoundError } from '@banking/shared';
-import { pool } from '../models/database.js';
-import { LLMProvider } from '../providers/llm.provider.js';
-import { Prompts } from '../prompts/index.js';
-import { config } from '../config/index.js';
+import { pool as defaultPool } from '../models/database';
+import { LLMProvider } from '../providers/llm.provider';
+import { Prompts } from '../prompts';
+import { config } from '../config';
 
 export interface RiskAnalysis {
   transactionId?: string;
@@ -13,14 +14,15 @@ export interface RiskAnalysis {
   recommendation: string;
 }
 
+@Injectable()
 export class AIService {
   private pool: Pool;
 
   constructor(
-    private llm: LLMProvider,
-    dbPool?: Pool,
+    @Inject('LLM_PROVIDER') private readonly llm: LLMProvider,
+    @Optional() @Inject('PG_POOL') dbPool?: Pool,
   ) {
-    this.pool = dbPool || pool;
+    this.pool = dbPool || defaultPool;
   }
 
   async explainTransaction(transactionId: string): Promise<{ transactionId: string; explanation: string }> {
@@ -75,22 +77,22 @@ export class AIService {
     }
 
     const totalDeposits = transactions
-      .filter(t => t.type === 'deposit' && t.status === 'completed')
+      .filter((t: any) => t.type === 'deposit' && t.status === 'completed')
       .reduce((sum: number, t: any) => sum + t.amount, 0);
 
     const totalWithdrawals = transactions
-      .filter(t => t.type === 'withdrawal' && t.status === 'completed')
+      .filter((t: any) => t.type === 'withdrawal' && t.status === 'completed')
       .reduce((sum: number, t: any) => sum + t.amount, 0);
 
     const totalTransfersOut = transactions
-      .filter(t => t.type === 'transfer' && t.status === 'completed' && t.sourceAccountId === accountId)
+      .filter((t: any) => t.type === 'transfer' && t.status === 'completed' && t.sourceAccountId === accountId)
       .reduce((sum: number, t: any) => sum + t.amount, 0);
 
     const totalTransfersIn = transactions
-      .filter(t => t.type === 'transfer' && t.status === 'completed' && t.targetAccountId === accountId)
+      .filter((t: any) => t.type === 'transfer' && t.status === 'completed' && t.targetAccountId === accountId)
       .reduce((sum: number, t: any) => sum + t.amount, 0);
 
-    const rejected = transactions.filter(t => t.status === 'rejected').length;
+    const rejected = transactions.filter((t: any) => t.status === 'rejected').length;
 
     const prompt = Prompts.summarizeAccount({
       accountId,
@@ -145,12 +147,7 @@ export class AIService {
       } catch { }
     }
 
-    const prompt = Prompts.analyzeRisk({
-      ...params,
-      accountBalance,
-      recentTransactionCount,
-    });
-
+    const prompt = Prompts.analyzeRisk({ ...params, accountBalance, recentTransactionCount });
     const raw = await this.llm.explain(prompt);
 
     let parsed: Omit<RiskAnalysis, 'transactionId'>;

@@ -1,4 +1,4 @@
-import { DomainEvent, Subject } from '../events/index.js';
+import { DomainEvent, Subject } from '../events/index';
 
 export interface IEventBus {
 

@@ -33,12 +33,12 @@ export KAFKAJS_NO_PARTITIONER_WARNING=1
 nohup env NODE_ENV=development \
   DB_HOST=localhost DB_PORT=5433 DB_NAME=customers_db DB_USER=customers_user DB_PASSWORD=customers_pass \
   DB_POOL_MAX=10 KAFKA_BROKERS=localhost:9092 REDIS_URL=redis://localhost:6379 PORT=3001 \
-  npx tsx packages/customer-service/src/index.ts > "$LOG_DIR/customer-service.log" 2>&1 &
+  npx tsx --tsconfig packages/customer-service/tsconfig.json packages/customer-service/src/main.ts > "$LOG_DIR/customer-service.log" 2>&1 &
 
 nohup env NODE_ENV=development \
   DB_HOST=localhost DB_PORT=5434 DB_NAME=transactions_db DB_USER=transactions_user DB_PASSWORD=transactions_pass \
   DB_POOL_MAX=10 KAFKA_BROKERS=localhost:9092 PORT=3002 \
-  npx tsx packages/transaction-service/src/index.ts > "$LOG_DIR/transaction-service.log" 2>&1 &
+  npx tsx --tsconfig packages/transaction-service/tsconfig.json packages/transaction-service/src/main.ts > "$LOG_DIR/transaction-service.log" 2>&1 &
 
 nohup env NODE_ENV=development \
   DB_HOST=localhost DB_PORT=5435 DB_NAME=ai_db DB_USER=ai_user DB_PASSWORD=ai_pass \
@@ -46,7 +46,7 @@ nohup env NODE_ENV=development \
   TRANSACTION_SERVICE_URL=http://localhost:3002 \
   CUSTOMER_SERVICE_URL=http://localhost:3001 \
   LLM_PROVIDER=mock \
-  npx tsx packages/ai-service/src/index.ts > "$LOG_DIR/ai-service.log" 2>&1 &
+  npx tsx --tsconfig packages/ai-service/tsconfig.json packages/ai-service/src/main.ts > "$LOG_DIR/ai-service.log" 2>&1 &
 
 nohup env NODE_ENV=development \
   KAFKA_BROKERS=localhost:9092 PORT=3000 \
@@ -54,7 +54,7 @@ nohup env NODE_ENV=development \
   CUSTOMER_SERVICE_URL=http://localhost:3001 \
   TRANSACTION_SERVICE_URL=http://localhost:3002 \
   AI_SERVICE_URL=http://localhost:3003 \
-  npx tsx packages/api-gateway/src/index.ts > "$LOG_DIR/api-gateway.log" 2>&1 &
+  npx tsx --tsconfig packages/api-gateway/tsconfig.json packages/api-gateway/src/main.ts > "$LOG_DIR/api-gateway.log" 2>&1 &
 
 nohup env NODE_ENV=development PORT=4000 \
   CUSTOMER_SERVICE_URL=http://localhost:3001 \

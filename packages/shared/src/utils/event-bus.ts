@@ -9,7 +9,7 @@ import {
   AckPolicy,
 } from 'nats';
 import { v4 as uuid } from 'uuid';
-import { DomainEvent, Subject } from '../events/index.js';
+import { DomainEvent, Subject } from '../events/index';
 
 const sc = StringCodec();
 

@@ -1,6 +1,7 @@
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
 import { Transaction, OutboxRepository } from '@banking/shared';
-import { pool } from '../models/database.js';
+import { pool as defaultPool } from '../models/database';
 
 export { OutboxRepository };
 
@@ -14,11 +15,12 @@ const SELECT_FIELDS = `
   completed_at AS "completedAt"
 `;
 
+@Injectable()
 export class TransactionRepository {
   private pool: Pool;
 
-  constructor(dbPool?: Pool) {
-    this.pool = dbPool || pool;
+  constructor(@Optional() @Inject("PG_POOL") dbPool?: Pool) {
+    this.pool = dbPool || defaultPool;
   }
 
   async create(txn: {
@@ -80,11 +82,12 @@ export class TransactionRepository {
   }
 }
 
+@Injectable()
 export class EventTracker {
   private pool: Pool;
 
-  constructor(dbPool?: Pool) {
-    this.pool = dbPool || pool;
+  constructor(@Optional() @Inject("PG_POOL") dbPool?: Pool) {
+    this.pool = dbPool || defaultPool;
   }
 
   async isProcessed(eventId: string): Promise<boolean> {
@@ -104,11 +107,12 @@ export class EventTracker {
   }
 }
 
+@Injectable()
 export class AccountProjectionRepository {
   private pool: Pool;
 
-  constructor(dbPool?: Pool) {
-    this.pool = dbPool || pool;
+  constructor(@Optional() @Inject("PG_POOL") dbPool?: Pool) {
+    this.pool = dbPool || defaultPool;
   }
 
   async upsert(accountId: string, balance: number, currency: string = 'PEN'): Promise<void> {

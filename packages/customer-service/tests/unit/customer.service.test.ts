@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CustomerService } from '../../src/services/customer.service.js';
+import { CustomerService } from '../../src/services/customer.service';
 import { ConflictError, NotFoundError } from '@banking/shared';
 
 const mockClientRepo = {

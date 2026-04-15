@@ -1,6 +1,6 @@
-import { AggregateRepository } from './aggregate.js';
-import { AccountAggregate, AccountState } from './account.aggregate.js';
-import { EventStoreRepository } from './event-store.repository.js';
+import { AggregateRepository } from './aggregate';
+import { AccountAggregate, AccountState } from './account.aggregate';
+import { EventStoreRepository } from './event-store.repository';
 
 export class AccountAggregateRepository extends AggregateRepository<AccountAggregate> {
   constructor(eventStore: EventStoreRepository) {

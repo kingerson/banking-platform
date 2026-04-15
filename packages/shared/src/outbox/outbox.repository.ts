@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { v4 as uuid } from 'uuid';
-import { Subject } from '../events/index.js';
+import { Subject } from '../events/index';
 
 export interface OutboxMessage {
   id: string;

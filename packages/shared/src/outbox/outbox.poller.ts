@@ -1,7 +1,7 @@
 import { Pool, PoolClient } from 'pg';
-import { IEventBus } from '../types/event-bus.interface.js';
-import { OutboxRepository } from './outbox.repository.js';
-import { Subject } from '../events/index.js';
+import { IEventBus } from '../types/event-bus.interface';
+import { OutboxRepository } from './outbox.repository';
+import { Subject } from '../events/index';
 
 export class OutboxPoller {
   private intervalId: NodeJS.Timeout | null = null;

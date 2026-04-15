@@ -1,6 +1,6 @@
 import { IEventBus, Subjects, DomainEvent, OutboxRepository } from '@banking/shared';
-import { AccountRepository, EventTracker } from '../repositories/index.js';
-import { pool } from '../models/database.js';
+import { AccountRepository, EventTracker } from '../repositories';
+import { pool } from '../models/database';
 
 export function registerSubscribers(eventBus: IEventBus, accountRepo: AccountRepository, tracker: EventTracker) {
   const outboxRepo = new OutboxRepository(pool);
@@ -23,7 +23,6 @@ export function registerSubscribers(eventBus: IEventBus, accountRepo: AccountRep
         if (type === 'deposit' && targetAccountId) {
           const updated = await accountRepo.updateBalance(targetAccountId, amount, 'credit', client);
           if (updated) {
-
             await outboxRepo.insert(
               Subjects.BalanceUpdated,
               {
@@ -45,7 +44,6 @@ export function registerSubscribers(eventBus: IEventBus, accountRepo: AccountRep
         if (type === 'withdrawal' && sourceAccountId) {
           const updated = await accountRepo.updateBalance(sourceAccountId, amount, 'debit', client);
           if (updated) {
-
             await outboxRepo.insert(
               Subjects.BalanceUpdated,
               {
@@ -65,7 +63,6 @@ export function registerSubscribers(eventBus: IEventBus, accountRepo: AccountRep
         }
 
         if (type === 'transfer' && sourceAccountId && targetAccountId) {
-
           const debited = await accountRepo.updateBalance(sourceAccountId, amount, 'debit', client);
           if (!debited) {
             throw new Error(`Failed to debit account ${sourceAccountId}`);
@@ -78,23 +75,13 @@ export function registerSubscribers(eventBus: IEventBus, accountRepo: AccountRep
 
           await outboxRepo.insert(
             Subjects.BalanceUpdated,
-            {
-              accountId: sourceAccountId,
-              previousBalance: debited.balance + amount,
-              newBalance: debited.balance,
-              transactionId,
-            },
+            { accountId: sourceAccountId, previousBalance: debited.balance + amount, newBalance: debited.balance, transactionId },
             client,
             event.correlationId,
           );
           await outboxRepo.insert(
             Subjects.BalanceUpdated,
-            {
-              accountId: targetAccountId,
-              previousBalance: credited.balance - amount,
-              newBalance: credited.balance,
-              transactionId,
-            },
+            { accountId: targetAccountId, previousBalance: credited.balance - amount, newBalance: credited.balance, transactionId },
             client,
             event.correlationId,
           );

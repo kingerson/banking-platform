@@ -1,134 +1,135 @@
+import { Injectable, OnModuleInit, Inject } from '@nestjs/common';
 import {
   IEventBus,
   Subjects,
   DomainEvent,
   OutboxRepository,
 } from '@banking/shared';
-import { TransactionRepository, EventTracker, AccountProjectionRepository } from '../repositories/index.js';
-import { pool } from '../models/database.js';
+import { TransactionRepository, EventTracker, AccountProjectionRepository } from '../repositories';
+import { pool } from '../models/database';
 
-export function registerTransactionSaga(
-  eventBus: IEventBus,
-  txnRepo: TransactionRepository,
-  tracker: EventTracker,
-  projectionRepo: AccountProjectionRepository,
-) {
-  const outboxRepo = new OutboxRepository(pool);
+@Injectable()
+export class SagaService implements OnModuleInit {
+  private outboxRepo: OutboxRepository;
 
-  eventBus.subscribe(
-    Subjects.TransactionRequested,
-    'txn-svc-saga',
-    async (event: DomainEvent<typeof Subjects.TransactionRequested>) => {
-      if (await tracker.isProcessed(event.id)) {
-        console.log(`[Saga] Event ${event.id} already processed`);
-        return;
-      }
+  constructor(
+    @Inject('KAFKA_BUS') private readonly eventBus: IEventBus,
+    @Inject(TransactionRepository) private readonly txnRepo: TransactionRepository,
+    @Inject(EventTracker) private readonly tracker: EventTracker,
+    @Inject(AccountProjectionRepository) private readonly projectionRepo: AccountProjectionRepository,
+  ) {
+    this.outboxRepo = new OutboxRepository(pool);
+  }
 
-      const { transactionId, type, amount, sourceAccountId, targetAccountId } = event.data;
-      console.log(`[Saga] Processing ${type} transaction: ${transactionId}`);
+  onModuleInit() {
+    this.registerSaga();
+    console.log('[transaction-service] Saga registered');
+  }
 
-      try {
-
-        if ((type === 'withdrawal' || type === 'transfer') && sourceAccountId) {
-          const exists = await projectionRepo.exists(sourceAccountId);
-          if (!exists) {
-            await rejectTransaction(txnRepo, outboxRepo, tracker, event, `Source account '${sourceAccountId}' not found`);
-            return;
-          }
-
-          const balance = await projectionRepo.getBalance(sourceAccountId);
-          if (balance === null || balance < amount) {
-            await rejectTransaction(
-              txnRepo, outboxRepo, tracker, event,
-              `Insufficient funds. Available: ${(balance ?? 0).toFixed(2)}, required: ${amount.toFixed(2)}`,
-            );
-            return;
-          }
+  private registerSaga() {
+    this.eventBus.subscribe(
+      Subjects.TransactionRequested,
+      'txn-svc-saga',
+      async (event: DomainEvent<typeof Subjects.TransactionRequested>) => {
+        if (await this.tracker.isProcessed(event.id)) {
+          console.log(`[Saga] Event ${event.id} already processed`);
+          return;
         }
 
-        if ((type === 'deposit' || type === 'transfer') && targetAccountId) {
-          const exists = await projectionRepo.exists(targetAccountId);
-          if (!exists) {
-            await rejectTransaction(txnRepo, outboxRepo, tracker, event, `Target account '${targetAccountId}' not found`);
-            return;
-          }
-        }
+        const { transactionId, type, amount, sourceAccountId, targetAccountId } = event.data;
+        console.log(`[Saga] Processing ${type} transaction: ${transactionId}`);
 
-        const dbClient = await pool.connect();
         try {
-          await dbClient.query('BEGIN');
+          if ((type === 'withdrawal' || type === 'transfer') && sourceAccountId) {
+            const exists = await this.projectionRepo.exists(sourceAccountId);
+            if (!exists) {
+              await this.rejectTransaction(event, `Source account '${sourceAccountId}' not found`);
+              return;
+            }
 
-          const completed = await txnRepo.updateStatus(transactionId, 'completed');
+            const balance = await this.projectionRepo.getBalance(sourceAccountId);
+            if (balance === null || balance < amount) {
+              await this.rejectTransaction(
+                event,
+                `Insufficient funds. Available: ${(balance ?? 0).toFixed(2)}, required: ${amount.toFixed(2)}`,
+              );
+              return;
+            }
+          }
 
-          await outboxRepo.insert(
-            Subjects.TransactionCompleted,
-            {
-              transactionId: completed.id,
-              type: completed.type,
-              amount: completed.amount,
-              currency: completed.currency,
-              sourceAccountId: completed.sourceAccountId,
-              targetAccountId: completed.targetAccountId,
-              description: completed.description ?? undefined,
-            },
-            dbClient,
-            event.correlationId,
-          );
+          if ((type === 'deposit' || type === 'transfer') && targetAccountId) {
+            const exists = await this.projectionRepo.exists(targetAccountId);
+            if (!exists) {
+              await this.rejectTransaction(event, `Target account '${targetAccountId}' not found`);
+              return;
+            }
+          }
 
-          await tracker.markProcessed(event.id, event.subject, dbClient);
-          await dbClient.query('COMMIT');
-          console.log(`[Saga] Transaction ${transactionId} COMPLETED`);
+          const dbClient = await pool.connect();
+          try {
+            await dbClient.query('BEGIN');
+
+            const completed = await this.txnRepo.updateStatus(transactionId, 'completed');
+
+            await this.outboxRepo.insert(
+              Subjects.TransactionCompleted,
+              {
+                transactionId: completed.id,
+                type: completed.type,
+                amount: completed.amount,
+                currency: completed.currency,
+                sourceAccountId: completed.sourceAccountId,
+                targetAccountId: completed.targetAccountId,
+                description: completed.description ?? undefined,
+              },
+              dbClient,
+              event.correlationId,
+            );
+
+            await this.tracker.markProcessed(event.id, event.subject, dbClient);
+            await dbClient.query('COMMIT');
+            console.log(`[Saga] Transaction ${transactionId} COMPLETED`);
+          } catch (error) {
+            await dbClient.query('ROLLBACK');
+            throw error;
+          } finally {
+            dbClient.release();
+          }
         } catch (error) {
-          await dbClient.query('ROLLBACK');
-          throw error;
-        } finally {
-          dbClient.release();
+          const message = error instanceof Error ? error.message : 'Unknown processing error';
+          await this.rejectTransaction(event, message);
         }
-        return;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown processing error';
-        await rejectTransaction(txnRepo, outboxRepo, tracker, event, message);
-      }
-    },
-  );
-}
-
-async function rejectTransaction(
-  txnRepo: TransactionRepository,
-  outboxRepo: OutboxRepository,
-  tracker: EventTracker,
-  event: DomainEvent<typeof Subjects.TransactionRequested>,
-  reason: string,
-) {
-  const { transactionId, type, amount, sourceAccountId, targetAccountId } = event.data;
-
-  const dbClient = await pool.connect();
-  try {
-    await dbClient.query('BEGIN');
-
-    await txnRepo.updateStatus(transactionId, 'rejected', reason);
-
-    await outboxRepo.insert(
-      Subjects.TransactionRejected,
-      {
-        transactionId,
-        type,
-        amount,
-        reason,
-        sourceAccountId,
-        targetAccountId,
       },
-      dbClient,
-      event.correlationId,
     );
+  }
 
-    await tracker.markProcessed(event.id, event.subject, dbClient);
-    await dbClient.query('COMMIT');
-    console.log(`[Saga] Transaction ${transactionId} REJECTED: ${reason}`);
-  } catch (error) {
-    await dbClient.query('ROLLBACK');
-    throw error;
-  } finally {
-    dbClient.release();
+  private async rejectTransaction(
+    event: DomainEvent<typeof Subjects.TransactionRequested>,
+    reason: string,
+  ) {
+    const { transactionId, type, amount, sourceAccountId, targetAccountId } = event.data;
+
+    const dbClient = await pool.connect();
+    try {
+      await dbClient.query('BEGIN');
+
+      await this.txnRepo.updateStatus(transactionId, 'rejected', reason);
+
+      await this.outboxRepo.insert(
+        Subjects.TransactionRejected,
+        { transactionId, type, amount, reason, sourceAccountId, targetAccountId },
+        dbClient,
+        event.correlationId,
+      );
+
+      await this.tracker.markProcessed(event.id, event.subject, dbClient);
+      await dbClient.query('COMMIT');
+      console.log(`[Saga] Transaction ${transactionId} REJECTED: ${reason}`);
+    } catch (error) {
+      await dbClient.query('ROLLBACK');
+      throw error;
+    } finally {
+      dbClient.release();
+    }
   }
 }

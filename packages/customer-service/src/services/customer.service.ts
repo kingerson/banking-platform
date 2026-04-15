@@ -1,3 +1,4 @@
+import { Injectable, Inject, Optional } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
 import {
   CreateClientInput,
@@ -7,25 +8,25 @@ import {
   ConflictError,
   generateAccountNumber,
 } from '@banking/shared';
-import { ClientRepository, AccountRepository, OutboxRepository } from '../repositories/index.js';
-import { pool as defaultPool } from '../models/database.js';
+import { ClientRepository, AccountRepository, OutboxRepository } from '../repositories';
+import { pool as defaultPool } from '../models/database';
 import type { Pool } from 'pg';
 
+@Injectable()
 export class CustomerService {
   private outboxRepo: OutboxRepository;
   private pool: Pool;
 
   constructor(
-    private clientRepo: ClientRepository,
-    private accountRepo: AccountRepository,
-    injectedPool?: Pool,
+    @Inject(ClientRepository) private clientRepo: ClientRepository,
+    @Inject(AccountRepository) private accountRepo: AccountRepository,
+    @Optional() @Inject('PG_POOL') injectedPool?: Pool,
   ) {
     this.pool = injectedPool ?? defaultPool;
     this.outboxRepo = new OutboxRepository(this.pool);
   }
 
   async createClient(input: CreateClientInput, correlationId?: string) {
-
     const existing = await this.clientRepo.findByEmail(input.email);
     if (existing) {
       throw new ConflictError(`Client with email '${input.email}' already exists`);
@@ -73,7 +74,6 @@ export class CustomerService {
   }
 
   async createAccount(input: CreateAccountInput, correlationId?: string) {
-
     const client = await this.clientRepo.findById(input.clientId);
     if (!client) throw new NotFoundError('Client', input.clientId);
 
@@ -120,7 +120,6 @@ export class CustomerService {
   }
 
   async getClientAccounts(clientId: string) {
-
     const client = await this.clientRepo.findById(clientId);
     if (!client) throw new NotFoundError('Client', clientId);
     return this.accountRepo.findByClientId(clientId);

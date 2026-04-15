@@ -1,5 +1,5 @@
-import { DLQRepository } from './dlq.repository.js';
-import { DomainEvent, Subject } from '../events/index.js';
+import { DLQRepository } from './dlq.repository';
+import { DomainEvent, Subject } from '../events/index';
 
 export interface DLQHandlerConfig {
   maxRetries: number;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TransactionService } from '../../src/services/transaction.service.js';
+import { TransactionService } from '../../src/services/transaction.service';
 import { DuplicateTransactionError, ValidationError } from '@banking/shared';
 
 const mockTxnRepo = {
